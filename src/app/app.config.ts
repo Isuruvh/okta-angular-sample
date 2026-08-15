@@ -20,8 +20,8 @@ import { OktaAuth } from '@okta/okta-auth-js';
 import { provideOktaAuth, withOktaConfig } from '@okta/okta-angular';
 
 const oktaAuth = new OktaAuth({
-  clientId: '{yourClientId}',
-  issuer: '{yourOktaDomain}/oauth2/default',
+  clientId: '0oa15sz7si4ST780h698',
+  issuer: 'https://integrator-4503275.okta.com/oauth2/default',
   redirectUri: 'http://localhost:4200/login/callback',
   scopes: ['openid', 'profile', 'email', 'offline_access'],
 });

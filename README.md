@@ -1,126 +1,250 @@
-# Okta Angular + Okta Redirect Model Example
+# Okta Angular SPA with PKCE Redirect Flow
 
-This example shows you how to use the [Okta Angular Library][] to login a user to an Angular application. The login is achieved through the [PKCE Flow][], where the user is redirected to the Okta-Hosted login page. After the user authenticates they are redirected back to the application with an ID Token and Access Token.
+This project is a minimal Angular Single-Page Application that verifies the Okta redirect-based sign-in flow using OAuth 2.0 Authorization Code with PKCE. The app redirects the user to Okta's hosted sign-in page, authenticates them, and then returns to the Angular app at the callback route.
 
-This example is built with [Angular CLI][] and styled with [Tailwind CSS](https://tailwindcss.com/).
+This sample demonstrates the recommended SPA pattern for Okta authentication:
 
-This code sample demonstrates
-* Configuring Okta
-* Sign-in and sign-out
-* Protecting routes
-* Displaying user profile information and ID Token claims
-* Adding an interceptor for adding the Access Token to HTTP calls
-* Calling a resource server for protected data
+- Authorization Code + PKCE for browser-based apps
+- Okta redirect flow to the hosted sign-in page
+- Callback handling with `OktaCallbackComponent`
+- Access-token attachment using an HTTP interceptor
+- Route protection with `canActivateAuthGuard`
+- User profile retrieval after login
+
+## What this app does
+
+When the user clicks Login, the app calls `signInWithRedirect()`. Okta then redirects the browser to the Okta-hosted sign-in page where the user enters credentials. After successful authentication, Okta redirects the browser back to:
+
+- `http://localhost:4200/login/callback`
+
+The app processes the callback and completes the token exchange. If authentication succeeds, the Angular routes behind `canActivateAuthGuard` become available.
+
+## PKCE and redirect flow
+
+This sample uses the Authorization Code flow with PKCE, which is the standard secure method for single-page applications running in a browser.
+
+The sequence is:
+
+1. The Angular app creates an `OktaAuth` instance.
+2. The user clicks Login.
+3. The browser is redirected to Okta.
+4. Okta shows the hosted sign-in page.
+5. The user authenticates.
+6. Okta redirects back to the configured callback URL.
+7. The app exchanges the code for tokens on the client side using PKCE.
+8. The app stores the tokens and uses them for API access.
+
+In this repository, the flow is configured in `src/app/app.config.ts` and the callback route is registered in `src/app/app.routes.ts`.
 
 ## Prerequisites
 
-Sign up for an [Integrator account](https://developer.okta.com/login). Once you have an account, sign in to your [Integrator account](https://developer.okta.com/login). Next, in the Admin Console:
+Before running the app, you need:
 
-1. Go to **Applications > Applications**
-2. Click **Create App Integration**
-3. Select **OIDC - OpenID Connect** as the sign-in method
-4. Select **Single-Page Application** as the application type, then click **Next**
-5. Enter an app integration name (e.g. "My Angular SPA")
-6. In the **Grant type** section, ensure both **Authorization Code** and **Refresh Token** are selected
-7. Configure the redirect URIs:
-- **Sign-in redirect URIs:** `http://localhost:4200/login/callback`
-- **Sign-out redirect URIs:** `http://localhost:4200`
-8. In the **Controlled access** section, select the appropriate access level
-9. Click **Save**
+- An Okta Developer org
+- A Single-Page Application app created in Okta
+- A valid Okta issuer URL
+- A valid Okta client ID
+- An Angular app running locally on `http://localhost:4200`
 
-## Configure Okta resources
+## Okta app configuration
 
-**Verify Authorization Server**
+Create an app in Okta as follows:
 
-When using a custom authorization server, you need to set up authorization policies. Complete these additional steps:
+1. Sign in to your Okta Admin Console.
+2. Go to Applications > Applications.
+3. Click Create App Integration.
+4. Choose:
+   - Sign-in method: OIDC - OpenID Connect
+   - Application type: Single-Page Application
+5. Click Next.
+6. Give the app a name such as `Angular PKCE SPA`.
+7. Under Grant type, enable:
+   - Authorization Code
+   - Refresh Token
+8. Add redirect URIs:
+   - Sign-in redirect URI: `http://localhost:4200/login/callback`
+   - Sign-out redirect URI: `http://localhost:4200`
+9. Save the app.
 
-1. In the Admin Console, go to **Security > API > Authorization Servers**
-2. Select your custom authorization server (`default`)
-3. On the **Access Policies** tab, ensure you have at least one policy:
-    - If no policies exist, click **Add New Access Policy**
-    - Give it a name like "Default Policy"
-    - Set **Assign to** to "All clients"
-    - Click **Create Policy**
-4. For your policy, ensure you have at least one rule:
-    - Click **Add Rule** if no rules exist
-    - Give it a name like "Default Rule"
-    - Set **Grant type** is to "Authorization Code"
-    - Set **User** is to "Any user assigned the app"
-    - Set **Scopes requested** to "Any scopes"
-    - Click **Create Rule**
+If you use a custom authorization server, make sure it has a policy and rule that includes Authorization Code grant. The default authorization server is usually sufficient for development unless your org has custom restrictions.
 
-For more details, see the [Custom Authorization Server documentation](https://developer.okta.com/docs/concepts/auth-servers/#custom-authorization-server).
+## Configure the app
 
-## Get the Code
-
-```shell
-git clone https://github.com/okta-samples/okta-angular-sample.git
-cd okta-angular-sample
-npm ci
-```
-
-Update `src/app/app.config.ts` with your Okta settings.
+Update the Okta configuration in `src/app/app.config.ts`:
 
 ```ts
 const oktaAuth = new OktaAuth({
-  issuer: 'https://{yourOktaDomain}',
-  clientId: '{yourClientID}',
-  redirectUri: window.location.origin + '/login/callback',
-  scopes: ['openid', 'profile', 'offline_access']
+  clientId: '{yourClientId}',
+  issuer: 'https://{yourOktaDomain}/oauth2/default',
+  redirectUri: 'http://localhost:4200/login/callback',
+  scopes: ['openid', 'profile', 'email', 'offline_access'],
 });
 ```
 
-### Where are my new app's credentials?
+### Where to find the values
 
-Creating an OIDC Single-Page App manually in the Admin Console configures your Okta Org with the application settings. You may also need to configure trusted origins for `http://localhost:4200` in **Security > API > Trusted Origins**.
+After creating the app, open the app’s General tab to collect:
 
-After creating the app, you can find the configuration details on the app's **General** tab:
-- **Client ID**: Found in the **Client Credentials** section
-- **Issuer**: Found in the **Issuer URI** field for the authorization server that appears by selecting **Security > API** from the navigation pane.
+- Client ID: under Client Credentials
+- Issuer: from the Authorization Server / Issuer URI
 
-## Run the Example
+You may also need to add `http://localhost:4200` as a Trusted Origin in Okta if your org requires it.
 
-Start the app by running
+## Local setup
 
-```shell
+Clone the project and install dependencies:
+
+```bash
+git clone <your-repo-url>
+cd okta-angular-sample
+npm install
+```
+
+Start the Angular app:
+
+```bash
 npm start
 ```
 
-Now navigate to http://localhost:4200 in your browser.
+Then open:
 
-If you see a home page that prompts you to login, then things are working! Clicking the **Login** button will redirect you to the Okta hosted sign-in page.
+```text
+http://localhost:4200
+```
 
-You can sign in with the same account that you created when signing up for your Developer Org, or you can use a known username and password from your Okta Directory.
+## How the sign-in flow works in this app
 
-> **Note:** If you are currently using the Okta Admin Console, you already have a Single Sign-On (SSO) session for your Org. You will be automatically logged into your application as the same user that is using the Admin Console. You may want to use an incognito tab to test the flow from a blank slate.
+### Home page
 
-Spec files have been updated to demonstrate how to configure the `TestBed` and provide a spy in place of Okta services.
+The home page is served by `src/app/home/home.component.ts` and includes a `Login` action. Clicking it triggers:
 
-Run tests by
+```ts
+await this.oktaAuth.signInWithRedirect();
+```
 
-```shell
+That command redirects the browser to the Okta login page.
+
+### Callback route
+
+The route `login/callback` is configured in `src/app/app.routes.ts` with `OktaCallbackComponent`:
+
+```ts
+{ path: 'login/callback', component: OktaCallbackComponent }
+```
+
+This callback component finishes the login response and processes the tokens returned from Okta.
+
+### Protected routes
+
+Protected pages use `canActivateAuthGuard`:
+
+```ts
+{ path: 'profile', component: ProfileComponent, canActivate: [canActivateAuthGuard] }
+```
+
+If the user is not authenticated, the guard redirects them to Okta.
+
+### Access token injection
+
+The app uses an HTTP interceptor in `src/app/auth.interceptor.ts` to attach the bearer token to safe local API requests:
+
+```ts
+const accessToken = oktaAuth.getAccessToken();
+```
+
+The interceptor adds the `Authorization: Bearer <token>` header when the request is to a local origin.
+
+## Project structure
+
+```text
+src/
+  app/
+    app.config.ts          # OktaAuth configuration
+    app.routes.ts          # Angular routes and callback registration
+    auth.interceptor.ts    # Adds access token to outgoing requests
+    home/
+      home.component.ts    # Login trigger and auth state
+    profile/
+    messages/
+    protected/
+```
+
+## Verifying the flow manually
+
+To verify this setup works end-to-end:
+
+1. Start the app with `npm start`.
+2. Open `http://localhost:4200`.
+3. Click Login.
+4. You should be redirected to Okta’s hosted sign-in page.
+5. Sign in with a valid Okta user.
+6. After successful authentication, Okta redirects back to `http://localhost:4200/login/callback`.
+7. The app should complete the login and show authenticated state.
+8. Navigate to a protected route such as `/profile` or `/messages`.
+9. Confirm the route loads only after authentication succeeds.
+
+### Expected behavior
+
+- A logged-out user sees the home page and login option.
+- After successful login, the app shows the authenticated user state.
+- Protected routes are accessible only after the auth flow completes.
+- The access token is sent in the Authorization header for allowed requests.
+
+## Troubleshooting
+
+### Redirect URI mismatch
+
+If login fails with an OAuth redirect error, verify the redirect URI exactly matches:
+
+- `http://localhost:4200/login/callback`
+
+It must match the value configured in Okta and the app configuration.
+
+### Invalid issuer or client ID
+
+If Okta rejects the request, confirm that:
+
+- `clientId` is correct
+- `issuer` points to the correct Okta authorization server
+- the app is created as a Single-Page Application
+
+### User is not redirected back properly
+
+Ensure that:
+
+- the Angular app is running on the correct port
+- no other route is intercepting `/login/callback`
+- the browser is not blocking the redirect
+
+### Access token missing on API calls
+
+If outgoing requests do not include a bearer token:
+
+- confirm the user is authenticated
+- check `oktaAuth.getAccessToken()` is returning a value
+- ensure the target URL matches an allowed origin in the interceptor
+
+## Running the tests
+
+This project includes Angular specs for basic auth-related behavior. To run them:
+
+```bash
 npm run test
 ```
 
-## Integrating the Resource Server
+## Related references
 
-If you were able to successfully login in the previous section you can continue with the resource server example. Please download and run one of these sample applications in another terminal:
+- Okta Developer Docs: OAuth 2.0 and OIDC
+- Okta Angular SDK documentation
+- Authorization Code with PKCE for SPAs
 
-* [Node/Express Resource Server Example](https://github.com/okta/samples-nodejs-express-4/tree/master/resource-server)
-* [Java/Spring MVC Resource Server Example](https://github.com/okta/samples-java-spring/tree/master/resource-server)
-* [ASP.NET](https://github.com/okta/samples-aspnet/tree/master/resource-server) and [ASP.NET Core](https://github.com/okta/samples-aspnetcore/tree/master/samples-aspnetcore-3x/resource-server) Resource Server Examples
+## Notes
 
-Once you have the resource server running (it will run on port 8000) you can visit the `/messages` page within the Angular application to see the authentication flow. The Angular application will use its stored access token to authenticate itself with the resource server, you will see this as the `Authorization: Bearer <access_token>` header on the request if you inspect the network traffic in the browser.
+This sample uses the Okta-hosted redirect model rather than an embedded Sign-In Widget. In other words, the user is redirected to Okta for authentication instead of embedding the widget directly inside the Angular page. The redirect approach is the most common and recommended setup for SPAs using PKCE.
 
-## Helpful resources
-* [Learn about Authentication, OAuth 2.0, and OpenID Connect](https://developer.okta.com/docs/concepts/)
-* [Angular essentials](https://angular.dev/essentials)
-* [Angular overview](https://angular.io/guide/developer-guide-overview)
+If you want, this project can also be extended with:
 
-## Help
-
-Please visit our [Okta Developer Forums](https://devforum.okta.com/).
-
-[Angular CLI]: https://angular.dev/tools/cli
-[Okta Angular Library]: https://github.com/okta/okta-angular
-[PKCE Flow]: https://developer.okta.com/docs/guides/implement-auth-code-pkce
+- logout handling
+- refresh token management
+- custom login UX
+- backend protected API integration
